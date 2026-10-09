@@ -8,6 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.9", "3.12"]
     steps:
@@ -21,4 +22,9 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
       - name: CLI smoke test
-        run: python -m devguard scan . --quiet
+        run: |
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          printf 'print("hello")\n' > "$tmpdir/clean.py"
+          python -m devguard --help
+          python -m devguard scan "$tmpdir" --quiet
