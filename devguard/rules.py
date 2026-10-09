@@ -41,4 +41,30 @@ RULES = (
     ),
     Rule("SEC-001", "HIGH", "Possible use of eval()", re.compile(r"\beval\s*\(")),
     Rule("SEC-002", "MEDIUM", "Possible use of exec()", re.compile(r"\bexec\s*\(")),
+    Rule(
+        "SEC-003",
+        "HIGH",
+        "Subprocess call enables a shell; review command-injection risk",
+        re.compile(
+            r"\bsubprocess\.(?:run|Popen|call|check_call|check_output)\s*\([^\n]*\bshell\s*=\s*True\b"
+        ),
+    ),
+    Rule(
+        "SEC-004",
+        "HIGH",
+        "Unsafe pickle deserialization can execute attacker-controlled code",
+        re.compile(r"\bpickle\.(?:load|loads)\s*\("),
+    ),
+    Rule(
+        "SEC-005",
+        "MEDIUM",
+        "Review yaml.load; prefer safe_load or SafeLoader for untrusted input",
+        re.compile(r"\byaml\.load\s*\("),
+    ),
+    Rule(
+        "SEC-006",
+        "HIGH",
+        "TLS certificate verification is disabled",
+        re.compile(r"\bverify\s*=\s*False\b"),
+    ),
 )
