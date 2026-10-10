@@ -19,12 +19,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install test dependencies
         run: python -m pip install --upgrade pip pytest
+      - name: Compile package and tests
+        run: python -m compileall -q devguard tests
       - name: Run tests
         run: python -m pytest -q
-      - name: CLI smoke test
+      - name: CLI smoke tests
         run: |
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
           printf 'print("hello")\n' > "$tmpdir/clean.py"
           python -m devguard --help
           python -m devguard scan "$tmpdir" --quiet
+          python -m devguard scan "$tmpdir" --format json | python -c 'import json, sys; assert json.load(sys.stdin)["count"] == 0'

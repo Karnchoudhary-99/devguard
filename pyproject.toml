@@ -14,5 +14,8 @@ authors = [{name = "Karnchoudhary-99"}]
 [project.scripts]
 devguard = "devguard.cli:main"
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
