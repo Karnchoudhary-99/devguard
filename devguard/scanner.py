@@ -1,6 +1,7 @@
 import fnmatch
+import os
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Sequence, Tuple
 
 from .models import Finding
 from .rules import RULES
@@ -19,25 +20,53 @@ def _read_ignore_patterns(root: Path) -> List[str]:
     except OSError:
         return []
     return [
-        line.strip().rstrip("/")
+        line.strip().replace("\\", "/").rstrip("/")
         for line in lines
-        if line.strip() and not line.lstrip().startswith("#") and line.strip().rstrip("/")
+        if line.strip() and not line.lstrip().startswith("#")
+        and line.strip().replace("\\", "/").rstrip("/")
     ]
 
 
+def _glob_matches(path_parts: Sequence[str], pattern_parts: Sequence[str]) -> bool:
+    """Match path components, treating ** as zero or more whole components."""
+    previous = [False] * (len(path_parts) + 1)
+    previous[0] = True
+
+    for pattern_part in pattern_parts:
+        current = [False] * (len(path_parts) + 1)
+        if pattern_part == "**":
+            current[0] = previous[0]
+            for index in range(1, len(path_parts) + 1):
+                current[index] = previous[index] or current[index - 1]
+        else:
+            for index in range(1, len(path_parts) + 1):
+                current[index] = (
+                    previous[index - 1]
+                    and fnmatch.fnmatchcase(path_parts[index - 1], pattern_part)
+                )
+        previous = current
+
+    return previous[-1]
+
+
 def _is_excluded(relative: Path, patterns: Iterable[str]) -> bool:
-    value = relative.as_posix()
     parts = relative.parts
     for raw_pattern in patterns:
         pattern = raw_pattern.strip().replace("\\", "/").rstrip("/")
         if not pattern:
             continue
-        if fnmatch.fnmatchcase(value, pattern):
+
+        if "/" not in pattern:
+            if any(fnmatch.fnmatchcase(part, pattern) for part in parts):
+                return True
+            continue
+
+        pattern_parts: Tuple[str, ...] = tuple(part for part in pattern.split("/") if part)
+        if _glob_matches(parts, pattern_parts):
             return True
-        if "/" not in pattern and any(fnmatch.fnmatchcase(part, pattern) for part in parts):
-            return True
+
         for index in range(1, len(parts)):
-            if fnmatch.fnmatchcase("/".join(parts[:index]), pattern):
+            if _glob_matches(parts[:index], pattern_parts):
                 return True
     return False
 
@@ -50,16 +79,26 @@ def iter_source_files(root: Path, exclude: Iterable[str] = ()) -> Iterable[Path]
         return
     if not root.is_dir():
         return
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(root)
-        if any(part in DEFAULT_EXCLUDED for part in relative.parts[:-1]):
-            continue
-        if _is_excluded(relative, patterns):
-            continue
-        if path.suffix.lower() in SOURCE_SUFFIXES:
-            yield path
+
+    for current, directories, filenames in os.walk(str(root), topdown=True, followlinks=False):
+        current_path = Path(current)
+        relative_current = current_path.relative_to(root)
+        directories[:] = sorted(
+            name
+            for name in directories
+            if name not in DEFAULT_EXCLUDED
+            and not _is_excluded(relative_current / name, patterns)
+        )
+
+        for filename in sorted(filenames):
+            path = current_path / filename
+            if not path.is_file():
+                continue
+            relative = path.relative_to(root)
+            if _is_excluded(relative, patterns):
+                continue
+            if path.suffix.lower() in SOURCE_SUFFIXES:
+                yield path
 
 
 def scan_file(path: Path) -> List[Finding]:
