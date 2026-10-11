@@ -17,8 +17,10 @@ def _read_ignore_patterns(root: Path) -> List[str]:
     ignore_file = root / ".devguardignore"
     try:
         lines = ignore_file.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+    except FileNotFoundError:
         return []
+    except OSError as exc:
+        raise OSError("cannot read ignore file {}: {}".format(ignore_file, exc)) from exc
     return [
         line.strip().replace("\\", "/").rstrip("/")
         for line in lines
@@ -71,8 +73,14 @@ def _is_excluded(relative: Path, patterns: Iterable[str]) -> bool:
     return False
 
 
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
 def iter_source_files(root: Path, exclude: Iterable[str] = ()) -> Iterable[Path]:
-    patterns = _read_ignore_patterns(root) + list(exclude)
+    patterns = list(exclude)
+    if root.is_dir():
+        patterns = _read_ignore_patterns(root) + patterns
     if root.is_file():
         if not _is_excluded(Path(root.name), patterns):
             yield root
@@ -80,19 +88,22 @@ def iter_source_files(root: Path, exclude: Iterable[str] = ()) -> Iterable[Path]
     if not root.is_dir():
         return
 
-    for current, directories, filenames in os.walk(str(root), topdown=True, followlinks=False):
+    for current, directories, filenames in os.walk(
+        str(root), topdown=True, onerror=_raise_walk_error, followlinks=False
+    ):
         current_path = Path(current)
         relative_current = current_path.relative_to(root)
         directories[:] = sorted(
             name
             for name in directories
             if name not in DEFAULT_EXCLUDED
+            and not (current_path / name).is_symlink()
             and not _is_excluded(relative_current / name, patterns)
         )
 
         for filename in sorted(filenames):
             path = current_path / filename
-            if not path.is_file():
+            if path.is_symlink() or not path.is_file():
                 continue
             relative = path.relative_to(root)
             if _is_excluded(relative, patterns):
@@ -104,25 +115,26 @@ def iter_source_files(root: Path, exclude: Iterable[str] = ()) -> Iterable[Path]
 def scan_file(path: Path) -> List[Finding]:
     findings = []
     try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return findings
-    for number, line in enumerate(lines, 1):
-        for rule in RULES:
-            if rule.pattern.search(line):
-                safe_line = line
-                if rule.rule_id.startswith("SECRET-"):
-                    safe_line = rule.pattern.sub("[REDACTED]", safe_line)
-                findings.append(
-                    Finding(
-                        rule.rule_id,
-                        rule.severity,
-                        rule.message,
-                        path,
-                        number,
-                        safe_line.strip()[:240],
-                    )
-                )
+        with path.open("r", encoding="utf-8", errors="replace") as source:
+            for number, line in enumerate(source, 1):
+                line = line.rstrip("\r\n")
+                for rule in RULES:
+                    if rule.pattern.search(line):
+                        safe_line = line
+                        if rule.rule_id.startswith("SECRET-"):
+                            safe_line = rule.pattern.sub("[REDACTED]", safe_line)
+                        findings.append(
+                            Finding(
+                                rule.rule_id,
+                                rule.severity,
+                                rule.message,
+                                path,
+                                number,
+                                safe_line.strip()[:240],
+                            )
+                        )
+    except OSError as exc:
+        raise OSError("cannot read source file {}: {}".format(path, exc)) from exc
     return findings
 
 

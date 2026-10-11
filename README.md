@@ -4,7 +4,7 @@ DevGuard is a lightweight developer security and code-quality scanner for local 
 
 ## Status
 
-Day 5 of a maximum 7-day build. DevGuard detects common hardcoded credentials and risky API patterns, supports configurable exclusions and JSON reports, redacts matched secret material from finding snippets, and prunes ignored directories during deterministic traversal. GitHub Actions runs the test suite on Python 3.9 and 3.12.
+Day 5 of a maximum 7-day build. DevGuard detects common hardcoded credentials and risky API patterns, supports configurable exclusions and JSON reports, redacts matched secret material from finding snippets, and prunes ignored directories during deterministic traversal. File scanning now streams line-by-line and reports incomplete scans as errors instead of silently claiming a clean result. GitHub Actions runs the test suite on Python 3.9 and 3.12.
 
 ## Install
 
@@ -17,7 +17,7 @@ Day 5 of a maximum 7-day build. DevGuard detects common hardcoded credentials an
     python -m devguard scan src --format json
     python -m devguard scan . --exclude "generated/**" --exclude "vendor/**"
 
-A finding causes exit code 1; a clean scan exits 0. Invalid paths or configuration exit 2. The --quiet option suppresses output and preserves the same exit codes.
+A finding causes exit code 1; a clean scan exits 0. Invalid paths, configuration errors, or unreadable source/ignore paths exit 2. The --quiet option suppresses output and preserves the same exit codes.
 
 ## Configuration
 
@@ -34,6 +34,8 @@ A .devguardignore file can contain one exclusion pattern per line. Blank lines a
 ## Reports and secret handling
 
 Text output is the default. Use --format json for machine-readable output containing the scan root, finding count, and each finding's path, line, severity, rule ID, message, and snippet. Secret-rule snippets replace matched material with [REDACTED] so ordinary reports are less likely to expose credentials. Other code snippets may still contain sensitive context; review report handling before uploading artifacts or posting logs.
+
+Directory scans skip symlinked files and directories rather than following paths outside the selected tree. If a source file, ignore file, or directory cannot be read, scanning stops with an error (exit code 2) instead of returning a potentially misleading clean result. File content is processed one line at a time to reduce peak memory use.
 
 ## Current checks
 
