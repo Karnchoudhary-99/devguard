@@ -78,6 +78,10 @@ def _raise_walk_error(error: OSError) -> None:
 
 
 def iter_source_files(root: Path, exclude: Iterable[str] = ()) -> Iterable[Path]:
+    # An explicitly supplied symlink is a scan boundary violation, not a file root.
+    if root.is_symlink():
+        raise OSError("refusing to scan symbolic link: {}".format(root))
+
     patterns = list(exclude)
     if root.is_dir():
         patterns = _read_ignore_patterns(root) + patterns
@@ -113,6 +117,9 @@ def iter_source_files(root: Path, exclude: Iterable[str] = ()) -> Iterable[Path]
 
 
 def scan_file(path: Path) -> List[Finding]:
+    if path.is_symlink():
+        raise OSError("refusing to scan symbolic link: {}".format(path))
+
     findings = []
     try:
         with path.open("r", encoding="utf-8", errors="replace") as source:
