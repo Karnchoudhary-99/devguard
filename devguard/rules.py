@@ -18,7 +18,7 @@ RULES = (
         "HIGH",
         "Possible hardcoded secret",
         re.compile(
-            r"""(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*['"][^'"]{8,}['"]"""
+            r"""(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*(?:"(?:\\.|[^"\\]){8,}"|'(?:\\.|[^'\\]){8,}')"""
         ),
     ),
     Rule(

@@ -82,7 +82,12 @@ def main() -> int:
             print("error: {}".format(exc), file=sys.stderr)
             return 2
 
-    findings = scan(root, exclude=[*config_excludes, *args.exclude])
+    try:
+        findings = scan(root, exclude=[*config_excludes, *args.exclude])
+    except OSError as exc:
+        print("error: {}".format(exc), file=sys.stderr)
+        return 2
+
     if args.quiet:
         return 1 if findings else 0
 

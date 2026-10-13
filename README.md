@@ -4,7 +4,7 @@ DevGuard is a lightweight developer security and code-quality scanner for local 
 
 ## Status
 
-Day 4 of a maximum 7-day build. DevGuard detects common hardcoded credentials and risky Python API patterns, supports CI exit codes, configurable exclusions, text or JSON reports, and redacts matched secret material from finding snippets. GitHub Actions runs the test suite on Python 3.9 and 3.12.
+Day 7 of a maximum 7-day build. DevGuard detects common hardcoded credentials and risky API patterns, supports configurable exclusions and JSON reports, redacts matched secret material from finding snippets, and prunes ignored directories during deterministic traversal. File scanning now streams line-by-line and reports incomplete scans as errors instead of silently claiming a clean result. GitHub Actions runs the test suite on Python 3.9 and 3.12.
 
 ## Install
 
@@ -17,7 +17,7 @@ Day 4 of a maximum 7-day build. DevGuard detects common hardcoded credentials an
     python -m devguard scan src --format json
     python -m devguard scan . --exclude "generated/**" --exclude "vendor/**"
 
-A finding causes exit code 1; a clean scan exits 0. Invalid paths or configuration exit 2. The --quiet option suppresses output and preserves the same exit codes.
+A finding causes exit code 1; a clean scan exits 0. Invalid paths, configuration errors, or unreadable source/ignore paths exit 2. The --quiet option suppresses output and preserves the same exit codes.
 
 ## Configuration
 
@@ -29,19 +29,21 @@ When scanning a directory, DevGuard automatically reads a .devguard.json file at
 
 Use --config PATH to select a different configuration file. Invalid JSON, unsupported keys, and invalid exclude values fail with an actionable error instead of silently changing scan scope.
 
-A .devguardignore file can contain one exclusion pattern per line. Blank lines and lines beginning with # are ignored. Patterns can match a relative path or, when no slash is present, any path component. Command-line exclusions and configuration exclusions are combined with .devguardignore entries. Common generated or dependency directories (.git, .venv, venv, __pycache__, and node_modules) are excluded by default.
+A .devguardignore file can contain one exclusion pattern per line. Blank lines and lines beginning with # are ignored. A pattern without a slash matches any path component. In path patterns, * matches within one path component and ** matches zero or more path components. Command-line exclusions and configuration exclusions are combined with .devguardignore entries. Common generated or dependency directories (.git, .venv, venv, __pycache__, and node_modules) are excluded by default and pruned from traversal.
 
 ## Reports and secret handling
 
 Text output is the default. Use --format json for machine-readable output containing the scan root, finding count, and each finding's path, line, severity, rule ID, message, and snippet. Secret-rule snippets replace matched material with [REDACTED] so ordinary reports are less likely to expose credentials. Other code snippets may still contain sensitive context; review report handling before uploading artifacts or posting logs.
 
+Directory scans skip symlinked files and directories rather than following paths outside the selected tree. Explicitly supplied symbolic-link scan roots are rejected as errors, too. If a source file, ignore file, or directory cannot be read, scanning stops with an error (exit code 2) instead of returning a potentially misleading clean result. File content is processed one line at a time to reduce peak memory use.
+
 ## Current checks
 
-- Secrets: generic hardcoded secret assignments, AWS access key IDs, GitHub token-like strings, and private-key headers.
-- Dynamic execution: eval() and exec().
-- Risky APIs: subprocess calls with shell=True, pickle deserialization, yaml.load() for manual review, and disabled TLS certificate verification.
+- Secrets: generic hardcoded credentials, cloud access key identifiers, source-hosting token-like strings, and private-key headers.
+- Dynamic execution APIs.
+- Risky subprocess shell mode, deserialization, YAML loading, and disabled TLS verification.
 
-These are heuristic, line-oriented checks rather than a full language parser. They can miss multiline or obfuscated cases and may flag benign code. In particular, yaml.load() is reported for review even when a safe loader argument is supplied. Review findings in context and never paste real credentials into issues or logs.
+These are heuristic, line-oriented checks rather than a full language parser. They can miss multiline or obfuscated cases and may flag benign code. Review findings in context and never paste real credentials into issues or logs.
 
 ## Development plan
 
